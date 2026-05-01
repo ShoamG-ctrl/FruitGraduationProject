@@ -2,5 +2,4 @@ streamlit
 fastai==2.7.15
 torch
 requests
-IPython
 gdown
