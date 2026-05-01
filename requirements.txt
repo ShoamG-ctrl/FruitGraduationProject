@@ -2,3 +2,4 @@ streamlit
 fastai
 torch
 requests
+IPython
