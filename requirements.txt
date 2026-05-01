@@ -1,5 +1,5 @@
 streamlit
-fastai==2.7.15
+fastai
 torch
-requests
+torchvision
 gdown
