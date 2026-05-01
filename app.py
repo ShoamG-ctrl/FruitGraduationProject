@@ -6,11 +6,16 @@ from fastai.vision.all import *
 from PIL import Image as PIL_Img
 import gdown
 
-# --- 1. תיקון קריטי לשגיאת ה-Resolver (פותר את הבעיה בתמונה) ---
+# --- 1. תיקון סופי לשגיאת ה-Resolver (כולל תמיכה ב-dict וקריאה ישירה) ---
 class Resolver:
     def __init__(self, *args, **kwargs): pass
     def dict(self, *args, **kwargs): return {}
     def __call__(self, *args, **kwargs): return self
+    def __getattr__(self, name): return self
+
+# הזרקת התיקון למרחב השמות הגלובלי כדי ש-load_learner יזהה אותו בוודאות
+import __main__
+__main__.Resolver = Resolver
 
 # --- 2. תיקון תאימות לנתיבים (Windows/Linux) ---
 if platform.system() == 'Linux':
@@ -27,11 +32,10 @@ if 'camera_key' not in st.session_state:
 # הגדרות דף
 st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
-# --- 4. עיצוב המסגרת הוירטואלית (מתאימה גם לאבטיחים) ---
+# --- 4. עיצוב המסגרת הוירטואלית ---
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
-    
     .focus-box {
         position: absolute; 
         top: 50px; 
@@ -45,7 +49,6 @@ st.markdown("""
         pointer-events: none; 
         z-index: 99;
     }
-    
     div.stButton > button { border-radius: 10px; font-weight: bold; height: 3em; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
@@ -62,14 +65,13 @@ def load_my_model():
         with st.spinner('מוריד מודל מ-Google Drive...'):
             url = f'https://drive.google.com/uc?id={file_id}'
             gdown.download(url, model_path, quiet=False)
-    # שימוש ב-cpu=True כדי למנוע קריסות בענן
     return load_learner(model_path, cpu=True)
 
 try:
     learn = load_my_model()
 except Exception as e:
     st.error(f"שגיאה בטעינת המודל: {e}")
-    st.info("נסה ללחוץ על שלוש הנקודות בפינה ולבחור 'Clear Cache'")
+    st.info("אם מופיעה שגיאת 'Resolver', לחץ על Reboot App בתפריט הניהול של Streamlit")
 
 # --- 6. ממשק בחירה ---
 option = st.sidebar.radio("בחר שיטה:", ("העלאת קבצים", "מצלמה חיה"))
@@ -92,7 +94,8 @@ else:
     st.markdown('<p class="instruction-text">מקם את הפרי בתוך המסגרת הצהובה</p>', unsafe_allow_html=True)
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
     
-    cam_file = st.camera_input("", key=f"cam_{st.session_state.camera_key}")
+    # עדכון: הוספת תווית "צילום פרי" למניעת אזהרות ב-Logs
+    cam_file = st.camera_input("צילום פרי", key=f"cam_{st.session_state.camera_key}")
     
     col1, col2 = st.columns(2)
     with col1:
