@@ -4,23 +4,26 @@ import streamlit as st
 from PIL import Image as PIL_Img
 import numpy as np
 import os
-import requests
-import gdown  # הוספנו את הספרייה הזו
+import gdown
+
+# --- תיקון קריטי לשגיאת ה-Resolver (המערכת מחפשת את המחלקה הזו) ---
+class Resolver:
+    def dict(self): return {}
 
 # תיקון לנתיבי Windows/Linux
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 
-# אתחול הזיכרון
+# אתחול הזיכרון של האפליקציה
 if 'basket' not in st.session_state:
     st.session_state.basket = []
 if 'camera_key' not in st.session_state:
     st.session_state.camera_key = 0
 
-# הגדרות דף
+# הגדרות דף הממשק
 st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
-# עיצוב הממשק
+# עיצוב ויזואלי לממשק
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
@@ -39,19 +42,19 @@ st.markdown("""
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שי עטר, שוהם גדליה, מיכאל פילוסוף")
 
-# פונקציה משופרת להורדת המודל מהדרייב
+# פונקציה להורדת המודל מ-Google Drive
 @st.cache_resource
 def load_my_model():
     file_id = '1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
     model_path = 'fruit_model.pkl'
     
     if not os.path.exists(model_path):
-        with st.spinner('מוריד מודל מ-Google Drive... זה עשוי לקחת דקה'):
-            # שימוש ב-gdown כדי לעקוף את חסימת ההורדה של גוגל לקבצים גדולים
+        with st.spinner('מוריד מודל מ-Google Drive...'):
             url = f'https://drive.google.com/uc?id={file_id}'
             gdown.download(url, model_path, quiet=False)
     
-    return load_learner(model_path)
+    # טעינת המודל עם הגדרות תאימות
+    return load_learner(model_path, cpu=True)
 
 try:
     learn = load_my_model()
@@ -68,6 +71,7 @@ if option == "העלאת קובצים":
         st.session_state.basket = list(uploaded)
         should_analyze = True
 else:
+    # הנחיית מרחק כף היד (12 ס"מ) שפיתחתם
     st.markdown('<p class="instruction-text">צלם את הפרי ממרחק כף יד (12 ס"מ)</p>', unsafe_allow_html=True)
     cam_file = st.camera_input("", key=f"cam_{st.session_state.camera_key}")
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
@@ -75,26 +79,20 @@ else:
     if cam_file:
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown('<div class="add-btn">', unsafe_allow_html=True)
             if st.button("➕ הוסף לסל"):
                 st.session_state.basket.append(cam_file)
                 st.toast("נוסף לסל!")
-            st.markdown('</div>', unsafe_allow_html=True)
         with col2:
-            st.markdown('<div class="retake-btn">', unsafe_allow_html=True)
             if st.button("🔄 צילום חדש"):
                 st.session_state.camera_key += 1
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
         with col3:
-            st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
             if st.button("🚀 נתח פרי"):
                 if cam_file not in st.session_state.basket:
                     st.session_state.basket.append(cam_file)
                 should_analyze = True 
-            st.markdown('</div>', unsafe_allow_html=True)
 
-# ביצוע הסיווג
+# ביצוע הסיווג (Ripeness Classification)
 if st.session_state.basket and should_analyze:
     st.write("---")
     st.write(f"### 🧺 תוצאות ניתוח ({len(st.session_state.basket)} תמונות):")
@@ -104,8 +102,6 @@ if st.session_state.basket and should_analyze:
     for i, file in enumerate(st.session_state.basket):
         try:
             img_pil = PIL_Img.open(file).convert('RGB')
-            
-            # ניתוח בעזרת המודל
             dl = learn.dls.test_dl([img_pil])
             batch_preds = learn.get_preds(dl=dl, with_decoded=True)
             res_idx = batch_preds[2][0].item()
@@ -123,19 +119,17 @@ if st.session_state.basket and should_analyze:
         except Exception as e:
             st.error(f"שגיאה בעיבוד תמונה {i+1}: {e}")
 
-    # לוגיקה מחמירה לסיכום
+    # לוגיקה לסיכום מצב הפרי
     st.write("---")
     if "rotten" in results_list:
         st.error("## 🏁 סיכום: הפרי רקוב ❌")
-        st.write("הסבר: נמצאו סימני ריקבון לפחות באחת מהתמונות.")
     elif "unripe" in results_list:
         st.warning("## 🏁 סיכום: הפרי בוסר ⚠️")
-        st.write("הסבר: הפרי לא רקוב, אך עדיין לא הבשיל לגמרי.")
     else:
         st.success("## 🏁 סיכום: הפרי בשל וטוב למאכל ✅")
         st.balloons()
 
-    if st.button("🗑️ נקה הכל והתחל מחדש"):
+    if st.button("🗑️ נקה הכל"):
         st.session_state.basket = []
         st.session_state.camera_key += 1
         st.rerun()
