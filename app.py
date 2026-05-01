@@ -3,18 +3,22 @@ from fastai.vision.all import *
 import streamlit as st
 from PIL import Image as PIL_Img
 import numpy as np
+import os  # חשוב מאוד לבדיקת קיום קבצים
 
-# תיקון לנתיבי Windows
+# תיקון לנתיבי Windows - תואם לסביבות פריסה שונות
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 
-# אתחול הזיכרון
+# אתחול הזיכרון (Session State)
 if 'basket' not in st.session_state:
     st.session_state.basket = []
 if 'camera_key' not in st.session_state:
     st.session_state.camera_key = 0
 
-# עיצוב הממשק
+# הגדרות עמוד בסיסיות
+st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
+
+# עיצוב הממשק (CSS)
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
@@ -30,23 +34,39 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שוהם גדליה, שי עטר, מיכאל פילוסוף")
 
 @st.cache_resource
 def load_my_model():
-    # המודל המעודכן של שוהם
-    return load_learner('fastai_classification_model_fruits_shoam_v2.1.pkl1.1.pkl')
+    # רשימת שמות אפשריים למודל ב-GitHub למקרה של טעות בשם
+    model_names = [
+        'fastai_classification_model_fruits_shoam_v2.1.pkl',
+        'fastai_classification_model_fruits_shoam_v2.1.pkl1.1.pkl'
+    ]
+    
+    found_model = None
+    for name in model_names:
+        if os.path.exists(name):
+            found_model = name
+            break
+            
+    if found_model:
+        return load_learner(found_model)
+    else:
+        # אם שום קובץ לא נמצא, נרים שגיאה מפורטת
+        raise FileNotFoundError(f"לא נמצא קובץ מודל. וודאו שהקובץ ב-GitHub נקרא בדיוק: {model_names[0]}")
 
+# ניסיון טעינת המודל
 try:
     learn = load_my_model()
 except Exception as e:
-    st.error(f"שגיאה בטעינת המודל: {e}")
+    st.error(f"❌ שגיאה בטעינת המודל: {e}")
+    st.info("טיפ: וודאו שקובץ ה-pkl נמצא באותה תיקייה עם הקוד ב-GitHub.")
+    st.stop() # עוצר את האפליקציה אם אין מודל
 
-option = st.radio("בחר שיטה:", ("העלאת קובצים", "מצלמה חיה"))
+option = st.radio("בחר שיטה:", ("מצלמה חיה", "העלאת קובצים"))
 
-# משתנה שיעזור לנו לדעת אם להריץ ניתוח עכשיו
 should_analyze = False
 
 if option == "העלאת קובצים":
@@ -56,8 +76,7 @@ if option == "העלאת קובצים":
         should_analyze = True
 else:
     st.markdown('<p class="instruction-text">צלם את הפרי מכל הצדדים</p>', unsafe_allow_html=True)
-    # הוספת טקסט למניעת שגיאת Label
-    cam_file = st.camera_input("צילום פרי", key=f"cam_{st.session_state.camera_key}")
+    cam_file = st.camera_input("צילום פרי לבדיקה", key=f"cam_{st.session_state.camera_key}")
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
     
     if cam_file:
@@ -82,7 +101,7 @@ else:
                 should_analyze = True 
             st.markdown('</div>', unsafe_allow_html=True)
 
-# ביצוע הסיווג - בדיוק לפי הלוגיקה המקורית שלכם
+# ביצוע הסיווג
 if st.session_state.basket and should_analyze:
     st.write("---")
     st.write(f"### 🧺 תוצאות ניתוח ({len(st.session_state.basket)} תמונות):")
@@ -93,6 +112,7 @@ if st.session_state.basket and should_analyze:
         try:
             img_pil = PIL_Img.open(file).convert('RGB')
             w, h = img_pil.size
+            # לוגיקת ה-Crop המקורית שלכם
             if w > 350 and h > 250:
                 left, top = (w-350)/2, (h-250)/2
                 img_pil = img_pil.crop((left, top, left+350, top+250))
@@ -111,18 +131,19 @@ if st.session_state.basket and should_analyze:
                 trans = {"ripe": "בשל", "unripe": "בוסר", "rotten": "רקוב"}
                 heb = trans.get(res_label, res_label)
                 c2.write(f"**תמונה {i+1}:** {heb} ({conf*100:.1f}%)")
-        except:
-            st.error(f"שגיאה בעיבוד תמונה {i+1}")
+        except Exception as e:
+            st.error(f"שגיאה בעיבוד תמונה {i+1}: {e}")
 
-    # שורת סיכום סופית
-    st.write("---")
-    if "rotten" in results_list:
-        st.error("## 🏁 סיכום: הפרי רקוב ❌")
-    elif "unripe" in results_list:
-        st.warning("## 🏁 סיכום: הפרי בוסר ⚠️")
-    else:
-        st.success("## 🏁 סיכום: הפרי בשל וטוב למאכל ✅")
-        st.balloons()
+    # סיכום סופי
+    if results_list:
+        st.write("---")
+        if "rotten" in results_list:
+            st.error("## 🏁 סיכום: הפרי רקוב ❌")
+        elif "unripe" in results_list:
+            st.warning("## 🏁 סיכום: הפרי בוסר ⚠️")
+        else:
+            st.success("## 🏁 סיכום: הפרי בשל וטוב למאכל ✅")
+            st.balloons()
 
     if st.button("🗑️ נקה הכל והתחל מחדש"):
         st.session_state.basket = []
