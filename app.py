@@ -3,8 +3,10 @@ from fastai.vision.all import *
 import streamlit as st
 from PIL import Image as PIL_Img
 import numpy as np
+import os
+import requests
 
-# תיקון לנתיבי Windows
+# תיקון לנתיבי Windows/Linux (חשוב להעלאה לענן)
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 
@@ -13,6 +15,9 @@ if 'basket' not in st.session_state:
     st.session_state.basket = []
 if 'camera_key' not in st.session_state:
     st.session_state.camera_key = 0
+
+# הגדרות דף
+st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
 # עיצוב הממשק
 st.markdown("""
@@ -30,13 +35,23 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שי עטר, שוהם גדליה, מיכאל פילוסוף")
 
+# פונקציה להורדת המודל מהדרייב במידה ואינו קיים בשרת
 @st.cache_resource
 def load_my_model():
-    return load_learner('fastai_classification_model_fruits_shoam_v2.1.pkl1.1.pkl')
+    # הקישור הישיר לקובץ של שוהם בדרייב
+    model_url = 'https://drive.google.com/uc?id=1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
+    model_path = 'fruit_model.pkl'
+    
+    if not os.path.exists(model_path):
+        with st.spinner('טוען את המודל מהדרייב... זה עשוי לקחת דקה באופן חד פעמי'):
+            r = requests.get(model_url, allow_redirects=True)
+            with open(model_path, 'wb') as f:
+                f.write(r.content)
+    
+    return load_learner(model_path)
 
 try:
     learn = load_my_model()
@@ -45,7 +60,6 @@ except Exception as e:
 
 option = st.radio("בחר שיטה:", ("העלאת קובצים", "מצלמה חיה"))
 
-# משתנה שיעזור לנו לדעת אם להריץ ניתוח עכשיו
 should_analyze = False
 
 if option == "העלאת קובצים":
@@ -54,7 +68,7 @@ if option == "העלאת קובצים":
         st.session_state.basket = list(uploaded)
         should_analyze = True
 else:
-    st.markdown('<p class="instruction-text">צלם את הפרי מכל הצדדים</p>', unsafe_allow_html=True)
+    st.markdown('<p class="instruction-text">צלם את הפרי ממרחק כף יד (12 ס"מ)</p>', unsafe_allow_html=True)
     cam_file = st.camera_input("", key=f"cam_{st.session_state.camera_key}")
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
     
@@ -77,7 +91,7 @@ else:
             if st.button("🚀 נתח פרי"):
                 if cam_file not in st.session_state.basket:
                     st.session_state.basket.append(cam_file)
-                should_analyze = True # הפעלה ישירה
+                should_analyze = True 
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ביצוע הסיווג
@@ -90,11 +104,8 @@ if st.session_state.basket and should_analyze:
     for i, file in enumerate(st.session_state.basket):
         try:
             img_pil = PIL_Img.open(file).convert('RGB')
-            w, h = img_pil.size
-            if w > 350 and h > 250:
-                left, top = (w-350)/2, (h-250)/2
-                img_pil = img_pil.crop((left, top, left+350, top+250))
             
+            # ניתוח בעזרת המודל
             dl = learn.dls.test_dl([img_pil])
             batch_preds = learn.get_preds(dl=dl, with_decoded=True)
             res_idx = batch_preds[2][0].item()
@@ -109,10 +120,10 @@ if st.session_state.basket and should_analyze:
                 trans = {"ripe": "בשל", "unripe": "בוסר", "rotten": "רקוב"}
                 heb = trans.get(res_label, res_label)
                 c2.write(f"**תמונה {i+1}:** {heb} ({conf*100:.1f}%)")
-        except:
-            st.error(f"שגיאה בעיבוד תמונה {i+1}")
+        except Exception as e:
+            st.error(f"שגיאה בעיבוד תמונה {i+1}: {e}")
 
-    # שורת סיכום סופית (הלוגיקה המחמירה)
+    # לוגיקה מחמירה לסיכום
     st.write("---")
     if "rotten" in results_list:
         st.error("## 🏁 סיכום: הפרי רקוב ❌")
