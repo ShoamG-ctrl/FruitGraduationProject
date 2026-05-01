@@ -1,144 +1,128 @@
 import pathlib
-import os
-import platform
-import streamlit as st
 from fastai.vision.all import *
+import streamlit as st
 from PIL import Image as PIL_Img
-import gdown
+import numpy as np
 
-# --- 1. תיקון סופי לשגיאת ה-Resolver (כולל תמיכה ב-dict וקריאה ישירה) ---
-class Resolver:
-    def __init__(self, *args, **kwargs): pass
-    def dict(self, *args, **kwargs): return {}
-    def __call__(self, *args, **kwargs): return self
-    def __getattr__(self, name): return self
+# תיקון לנתיבי Windows
+temp = pathlib.PosixPath
+pathlib.PosixPath = pathlib.WindowsPath
 
-# הזרקת התיקון למרחב השמות הגלובלי כדי ש-load_learner יזהה אותו בוודאות
-import __main__
-__main__.Resolver = Resolver
-
-# --- 2. תיקון תאימות לנתיבים (Windows/Linux) ---
-if platform.system() == 'Linux':
-    pathlib.WindowsPath = pathlib.PosixPath
-else:
-    pathlib.PosixPath = pathlib.WindowsPath
-
-# --- 3. אתחול הזיכרון (סל הפירות) ---
+# אתחול הזיכרון
 if 'basket' not in st.session_state:
     st.session_state.basket = []
 if 'camera_key' not in st.session_state:
     st.session_state.camera_key = 0
 
-# הגדרות דף
+# הגדרות עמוד
 st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
-# --- 4. עיצוב המסגרת הוירטואלית ---
+# עיצוב הממשק
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
     .focus-box {
-        position: absolute; 
-        top: 50px; 
-        left: 50%; 
-        transform: translateX(-50%);
-        width: 85%; 
-        max-width: 450px;
-        height: 300px; 
-        border: 5px dashed #FFEB3B; 
-        border-radius: 25px;
-        pointer-events: none; 
-        z-index: 99;
+        position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+        width: 350px; height: 250px; border: 4px dashed black; border-radius: 15px;
+        pointer-events: none; z-index: 99;
     }
     div.stButton > button { border-radius: 10px; font-weight: bold; height: 3em; width: 100%; }
+    .add-btn > div > button { background-color: #2196F3; color: white; }
+    .retake-btn > div > button { background-color: #607D8B; color: white; }
+    .analyze-btn > div > button { background-color: #4CAF50; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שי עטר, שוהם גדליה, מיכאל פילוסוף")
 
-# --- 5. טעינת המודל מ-Google Drive ---
 @st.cache_resource
 def load_my_model():
-    file_id = '1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
-    model_path = 'fruit_model.pkl'
-    if not os.path.exists(model_path):
-        with st.spinner('מוריד מודל מ-Google Drive...'):
-            url = f'https://drive.google.com/uc?id={file_id}'
-            gdown.download(url, model_path, quiet=False)
-    return load_learner(model_path, cpu=True)
+    # ודאו ששם הקובץ כאן מדויק לשם שיש לכם ב-GitHub/Drive
+    return load_learner('fastai_classification_model_fruits_shai_v3.1.pkl1.1.pkl')
 
 try:
     learn = load_my_model()
 except Exception as e:
     st.error(f"שגיאה בטעינת המודל: {e}")
-    st.info("אם מופיעה שגיאת 'Resolver', לחץ על Reboot App בתפריט הניהול של Streamlit")
 
-# --- 6. ממשק בחירה ---
-option = st.sidebar.radio("בחר שיטה:", ("העלאת קבצים", "מצלמה חיה"))
+option = st.radio("בחר שיטה:", ("העלאת קובצים", "מצלמה חיה"))
+
 should_analyze = False
 
-if option == "העלאת קבצים":
-    uploaded_files = st.file_uploader("בחר תמונות להוספה לסל:", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("➕ הוסף תמונות לסל"):
-            if uploaded_files:
-                st.session_state.basket.extend(uploaded_files)
-                st.toast(f"נוספו {len(uploaded_files)} תמונות!")
-    with col2:
-        if st.button("🚀 נתח את כל הסל"):
-            should_analyze = True
-
+if option == "העלאת קובצים":
+    uploaded = st.file_uploader("בחר תמונות...", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    if uploaded:
+        st.session_state.basket = list(uploaded)
+        should_analyze = True
 else:
-    st.markdown('<p class="instruction-text">מקם את הפרי בתוך המסגרת הצהובה</p>', unsafe_allow_html=True)
+    st.markdown('<p class="instruction-text">צלם את הפרי מכל הצדדים</p>', unsafe_allow_html=True)
+    # כאן הוספנו את הטקסט "צילום פרי" כדי למנוע את שגיאת ה-Label
+    cam_file = st.camera_input("צילום פרי לבדיקה", key=f"cam_{st.session_state.camera_key}")
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
     
-    # עדכון: הוספת תווית "צילום פרי" למניעת אזהרות ב-Logs
-    cam_file = st.camera_input("צילום פרי", key=f"cam_{st.session_state.camera_key}")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("➕ הוסף תמונה לסל"):
-            if cam_file:
+    if cam_file:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("➕ הוסף לסל"):
                 st.session_state.basket.append(cam_file)
-                st.toast("התמונה נוספה!")
-    with col2:
-        if st.button("🚀 נתח את כל הסל"):
-            should_analyze = True
+                st.toast("נוסף לסל!")
+        with col2:
+            if st.button("🔄 צילום חדש"):
+                st.session_state.camera_key += 1
+                st.rerun()
+        with col3:
+            if st.button("🚀 נתח פרי"):
+                if cam_file not in st.session_state.basket:
+                    st.session_state.basket.append(cam_file)
+                should_analyze = True
 
-# --- 7. הצגת הסל וביצוע הניתוח ---
-if st.session_state.basket:
-    st.write(f"### 🧺 סל הפירות שלך ({len(st.session_state.basket)} תמונות)")
-    if st.button("🗑️ רוקן סל"):
-        st.session_state.basket = []
-        st.session_state.camera_key += 1
-        st.rerun()
-
+# ביצוע הסיווג
 if st.session_state.basket and should_analyze:
     st.write("---")
+    st.write(f"### 🧺 תוצאות ניתוח ({len(st.session_state.basket)} תמונות):")
+    
     results_list = []
     
     for i, file in enumerate(st.session_state.basket):
         try:
             img_pil = PIL_Img.open(file).convert('RGB')
-            pred, pred_idx, probs = learn.predict(img_pil)
-            res_label = str(pred).lower()
+            
+            # שינינו את הלוגיקה כאן: המודל שלכם אומן על תמונות מרובעות. 
+            # במקום לחתוך (Crop) שאולי מוריד את הפרי מהתמונה, אנחנו עושים Resize
+            img_for_model = img_pil.resize((224, 224))
+            
+            # חיזוי
+            prediction = learn.predict(img_for_model)
+            res_label = str(prediction[0]).lower()
+            conf = max(prediction[2]).item()
+            
             results_list.append(res_label)
             
             with st.container():
                 c1, c2 = st.columns([1, 2])
-                c1.image(img_pil, width=150)
+                c1.image(img_pil, width=150) # מציג את התמונה המקורית למשתמש
                 trans = {"ripe": "בשל", "unripe": "בוסר", "rotten": "רקוב"}
                 heb = trans.get(res_label, res_label)
-                c2.write(f"**תמונה {i+1}:** {heb} ({probs[pred_idx].item()*100:.1f}%)")
-        except: continue
+                
+                # צבע לפי התוצאה
+                color = "green" if res_label == "ripe" else "orange" if res_label == "unripe" else "red"
+                c2.markdown(f"**תמונה {i+1}:** <span style='color:{color}'>{heb}</span> ({conf*100:.1f}%)", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"שגיאה בעיבוד תמונה {i+1}: {e}")
 
-    st.write("---")
-    if "rotten" in results_list:
-        st.error("## סיכום סופי: נמצא פרי רקוב בסל ❌")
-    elif "unripe" in results_list:
-        st.warning("## סיכום סופי: הפירות בוסר ⚠️")
-    else:
-        st.success("## סיכום סופי: הפירות בשלים וטובים ✅")
-        st.balloons()
+    # סיכום סופי
+    if results_list:
+        st.write("---")
+        if "rotten" in results_list:
+            st.error("## 🏁 סיכום: הפרי רקוב ❌")
+        elif "unripe" in results_list:
+            st.warning("## 🏁 סיכום: הפרי בוסר ⚠️")
+        else:
+            st.success("## 🏁 סיכום: הפרי בשל וטוב למאכל ✅")
+            st.balloons()
+
+    if st.button("🗑️ נקה הכל"):
+        st.session_state.basket = []
+        st.session_state.camera_key += 1
+        st.rerun()
