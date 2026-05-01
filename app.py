@@ -5,8 +5,9 @@ from PIL import Image as PIL_Img
 import numpy as np
 import os
 import requests
+import gdown  # הוספנו את הספרייה הזו
 
-# תיקון לנתיבי Windows/Linux (חשוב להעלאה לענן)
+# תיקון לנתיבי Windows/Linux
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 
@@ -38,18 +39,17 @@ st.markdown("""
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שי עטר, שוהם גדליה, מיכאל פילוסוף")
 
-# פונקציה להורדת המודל מהדרייב במידה ואינו קיים בשרת
+# פונקציה משופרת להורדת המודל מהדרייב
 @st.cache_resource
 def load_my_model():
-    # הקישור הישיר לקובץ של שוהם בדרייב
-    model_url = 'https://drive.google.com/uc?id=1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
+    file_id = '1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
     model_path = 'fruit_model.pkl'
     
     if not os.path.exists(model_path):
-        with st.spinner('טוען את המודל מהדרייב... זה עשוי לקחת דקה באופן חד פעמי'):
-            r = requests.get(model_url, allow_redirects=True)
-            with open(model_path, 'wb') as f:
-                f.write(r.content)
+        with st.spinner('מוריד מודל מ-Google Drive... זה עשוי לקחת דקה'):
+            # שימוש ב-gdown כדי לעקוף את חסימת ההורדה של גוגל לקבצים גדולים
+            url = f'https://drive.google.com/uc?id={file_id}'
+            gdown.download(url, model_path, quiet=False)
     
     return load_learner(model_path)
 

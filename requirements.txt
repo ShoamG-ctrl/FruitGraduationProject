@@ -3,3 +3,4 @@ fastai
 torch
 requests
 IPython
+gdown
