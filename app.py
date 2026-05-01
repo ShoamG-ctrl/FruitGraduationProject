@@ -6,7 +6,12 @@ from fastai.vision.all import *
 from PIL import Image as PIL_Img
 import gdown
 
-# --- תיקון תאימות למערכות הפעלה ---
+# --- תיקון קריטי לשגיאת ה-Resolver (תמונה image_56fe7c.png) ---
+class Resolver:
+    def __init__(self, *args, **kwargs): pass
+    def dict(self, *args, **kwargs): return {}
+
+# תיקון תאימות לנתיבים (Windows/Linux)
 if platform.system() == 'Linux':
     pathlib.WindowsPath = pathlib.PosixPath
 else:
@@ -21,20 +26,21 @@ if 'camera_key' not in st.session_state:
 # הגדרות דף
 st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
-# --- עיצוב ויזואלי והמסגרת הוירטואלית ---
+# --- עיצוב ויזואלי והמסגרת הוירטואלית (מורחבת לאבטיח) ---
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
     
     .focus-box {
         position: absolute; 
-        bottom: 150px; 
+        top: 50px; 
         left: 50%; 
         transform: translateX(-50%);
-        width: 300px; 
+        width: 80%; /* רחב יותר לאבטיחים */
+        max-width: 450px;
         height: 300px; 
-        border: 4px dashed #FFEB3B; 
-        border-radius: 20px;
+        border: 5px dashed #FFEB3B; 
+        border-radius: 25px;
         pointer-events: none; 
         z-index: 99;
     }
@@ -81,9 +87,10 @@ if option == "העלאת קבצים":
 
 # --- אפשרות 2: מצלמה חיה ---
 else:
-    st.markdown('<p class="instruction-text">מקם את הפרי בתוך המסגרת המקווקוות</p>', unsafe_allow_html=True)
-    st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
+    st.markdown('<p class="instruction-text">מקם את הפרי בתוך המסגרת הצהובה</p>', unsafe_allow_html=True)
     
+    # מיקום המסגרת מעל המצלמה
+    st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
     cam_file = st.camera_input("", key=f"cam_{st.session_state.camera_key}")
     
     col1, col2 = st.columns(2)
@@ -99,8 +106,6 @@ else:
 # --- הצגת הסל הנוכחי ---
 if st.session_state.basket:
     st.write(f"### 🧺 סל הפירות שלך ({len(st.session_state.basket)} תמונות)")
-    
-    # כפתור ניקוי
     if st.button("🗑️ רוקן סל"):
         st.session_state.basket = []
         st.session_state.camera_key += 1
@@ -127,7 +132,6 @@ if st.session_state.basket and should_analyze:
         except:
             continue
 
-    # סיכום לוגי
     st.write("---")
     if "rotten" in results_list:
         st.error("## סיכום סופי: נמצא פרי רקוב בסל ❌")
