@@ -6,18 +6,19 @@ from fastai.vision.all import *
 from PIL import Image as PIL_Img
 import gdown
 
-# --- תיקון קריטי לשגיאת ה-Resolver (תמונה image_56fe7c.png) ---
+# --- 1. תיקון קריטי לשגיאת ה-Resolver (פותר את הבעיה בתמונה) ---
 class Resolver:
     def __init__(self, *args, **kwargs): pass
     def dict(self, *args, **kwargs): return {}
+    def __call__(self, *args, **kwargs): return self
 
-# תיקון תאימות לנתיבים (Windows/Linux)
+# --- 2. תיקון תאימות לנתיבים (Windows/Linux) ---
 if platform.system() == 'Linux':
     pathlib.WindowsPath = pathlib.PosixPath
 else:
     pathlib.PosixPath = pathlib.WindowsPath
 
-# אתחול הזיכרון (סל הפירות)
+# --- 3. אתחול הזיכרון (סל הפירות) ---
 if 'basket' not in st.session_state:
     st.session_state.basket = []
 if 'camera_key' not in st.session_state:
@@ -26,7 +27,7 @@ if 'camera_key' not in st.session_state:
 # הגדרות דף
 st.set_page_config(page_title="Fruit Guard AI", page_icon="🍎")
 
-# --- עיצוב ויזואלי והמסגרת הוירטואלית (מורחבת לאבטיח) ---
+# --- 4. עיצוב המסגרת הוירטואלית (מתאימה גם לאבטיחים) ---
 st.markdown("""
     <style>
     .instruction-text { text-align: center; font-size: 20px; font-weight: bold; direction: rtl; }
@@ -36,7 +37,7 @@ st.markdown("""
         top: 50px; 
         left: 50%; 
         transform: translateX(-50%);
-        width: 80%; /* רחב יותר לאבטיחים */
+        width: 85%; 
         max-width: 450px;
         height: 300px; 
         border: 5px dashed #FFEB3B; 
@@ -52,6 +53,7 @@ st.markdown("""
 st.title("🍎 Fruit Guard AI")
 st.subheader("פרויקט גמר: שי עטר, שוהם גדליה, מיכאל פילוסוף")
 
+# --- 5. טעינת המודל מ-Google Drive ---
 @st.cache_resource
 def load_my_model():
     file_id = '1YSaA9C6evr7I5yGpCXN8QY7fuGLETDL-'
@@ -60,42 +62,41 @@ def load_my_model():
         with st.spinner('מוריד מודל מ-Google Drive...'):
             url = f'https://drive.google.com/uc?id={file_id}'
             gdown.download(url, model_path, quiet=False)
+    # שימוש ב-cpu=True כדי למנוע קריסות בענן
     return load_learner(model_path, cpu=True)
 
 try:
     learn = load_my_model()
 except Exception as e:
     st.error(f"שגיאה בטעינת המודל: {e}")
+    st.info("נסה ללחוץ על שלוש הנקודות בפינה ולבחור 'Clear Cache'")
 
+# --- 6. ממשק בחירה ---
 option = st.sidebar.radio("בחר שיטה:", ("העלאת קבצים", "מצלמה חיה"))
-
 should_analyze = False
 
-# --- אפשרות 1: העלאת קבצים ---
 if option == "העלאת קבצים":
     uploaded_files = st.file_uploader("בחר תמונות להוספה לסל:", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➕ הוסף את התמונות לסל"):
+        if st.button("➕ הוסף תמונות לסל"):
             if uploaded_files:
                 st.session_state.basket.extend(uploaded_files)
-                st.toast(f"נוספו {len(uploaded_files)} תמונות לסל!")
+                st.toast(f"נוספו {len(uploaded_files)} תמונות!")
     with col2:
         if st.button("🚀 נתח את כל הסל"):
             should_analyze = True
 
-# --- אפשרות 2: מצלמה חיה ---
 else:
     st.markdown('<p class="instruction-text">מקם את הפרי בתוך המסגרת הצהובה</p>', unsafe_allow_html=True)
-    
-    # מיקום המסגרת מעל המצלמה
     st.markdown('<div class="focus-box"></div>', unsafe_allow_html=True)
+    
     cam_file = st.camera_input("", key=f"cam_{st.session_state.camera_key}")
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➕ הוסף תמונה זו לסל"):
+        if st.button("➕ הוסף תמונה לסל"):
             if cam_file:
                 st.session_state.basket.append(cam_file)
                 st.toast("התמונה נוספה!")
@@ -103,7 +104,7 @@ else:
         if st.button("🚀 נתח את כל הסל"):
             should_analyze = True
 
-# --- הצגת הסל הנוכחי ---
+# --- 7. הצגת הסל וביצוע הניתוח ---
 if st.session_state.basket:
     st.write(f"### 🧺 סל הפירות שלך ({len(st.session_state.basket)} תמונות)")
     if st.button("🗑️ רוקן סל"):
@@ -111,7 +112,6 @@ if st.session_state.basket:
         st.session_state.camera_key += 1
         st.rerun()
 
-# --- ביצוע הניתוח ---
 if st.session_state.basket and should_analyze:
     st.write("---")
     results_list = []
@@ -129,8 +129,7 @@ if st.session_state.basket and should_analyze:
                 trans = {"ripe": "בשל", "unripe": "בוסר", "rotten": "רקוב"}
                 heb = trans.get(res_label, res_label)
                 c2.write(f"**תמונה {i+1}:** {heb} ({probs[pred_idx].item()*100:.1f}%)")
-        except:
-            continue
+        except: continue
 
     st.write("---")
     if "rotten" in results_list:
